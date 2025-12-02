@@ -1,0 +1,144 @@
+#include <Wire.h>
+
+// ============================
+// CONFIGURAÇÃO DE HARDWARE
+// ============================
+const int MPU = 0x68;     // Endereço I2C do MPU6050
+const int buzzer = 6;     // Pino do buzzer no LilyPad (use o mesmo pino)
+
+// ============================
+// VARIÁVEIS GLOBAIS
+// ============================
+float pitch = 0, roll = 0, yaw = 0;
+float GyX, GyY, GyZ;
+
+// Limites de detecção (pode ajustar dependendo do boné)
+int LIM_FRENTE = 14;   // inclinar para frente
+int LIM_TRAS   = -12;  // inclinar para trás
+int LIM_LADO   = 12;   // inclinação lateral
+int LIM_TORCAO_YAW = 25;
+int LIM_TORCAO_GZ  = 35;
+int LIM_QUEDA = -60;   // movimento brusco (queda/postura muito torta)
+
+// ============================
+// PADRÕES DE SOM DO BUZZER
+// ============================
+void somFrente() {
+  tone(buzzer, 2000, 150);
+  delay(170);
+  tone(buzzer, 2000, 150);
+  delay(170);
+  tone(buzzer, 2000, 150);
+}
+
+void somTras() {
+  tone(buzzer, 900, 350);
+  delay(300);
+  tone(buzzer, 900, 350);
+}
+
+void somLateral() {
+  tone(buzzer, 2000, 200); delay(200);
+  tone(buzzer, 900, 200);
+}
+
+void somTorcao() {
+  tone(buzzer, 1400, 600);
+}
+
+void somQueda() {
+  for (int i = 0; i < 6; i++) {
+    tone(buzzer, 2500, 90);
+    delay(120);
+  }
+}
+
+// ============================
+// SETUP
+// ============================
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  pinMode(buzzer, OUTPUT);
+
+  // Acordar o MPU6050
+  Wire.beginTransmission(MPU);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+
+  Serial.println("MPU6050 iniciado...");
+}
+
+// ============================
+// FUNÇÃO: Ler acelerômetro e giroscópio
+// ============================
+void lerMPU() {
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 14, true);
+
+  int16_t AcX = Wire.read() << 8 | Wire.read();
+  int16_t AcY = Wire.read() << 8 | Wire.read();
+  int16_t AcZ = Wire.read() << 8 | Wire.read();
+
+  Wire.read(); Wire.read(); // temperatura ignorada
+
+  GyX = Wire.read() << 8 | Wire.read();
+  GyY = Wire.read() << 8 | Wire.read();
+  GyZ = Wire.read() << 8 | Wire.read();
+
+  // Cálculo dos ângulos (estimado)
+  pitch = atan2(AcY, AcZ) * 180.0 / PI;
+  roll  = atan2(-AcX, AcZ) * 180.0 / PI;
+
+  // "Yaw" aproximado pelo giroscópio
+  yaw += GyZ * 0.00007;
+}
+
+// ============================
+// LOOP PRINCIPAL
+// ============================
+void loop() {
+
+  lerMPU();
+
+  // Debug visual
+  Serial.print("Pitch: "); Serial.print(pitch);
+  Serial.print(" | Roll: "); Serial.print(roll);
+  Serial.print(" | Yaw: "); Serial.print(yaw);
+  Serial.print(" | GyZ: "); Serial.println(GyZ);
+
+  // Frente
+  if (pitch > LIM_FRENTE) {
+    somFrente();
+    delay(300);
+  }
+
+  // Trás
+  if (pitch < LIM_TRAS) {
+    somTras();
+    delay(300);
+  }
+
+  // Lateral esquerda / direita
+  if (roll > LIM_LADO || roll < -LIM_LADO) {
+    somLateral();
+    delay(300);
+  }
+
+  // Torção exagerada
+  if (abs(yaw) > LIM_TORCAO_YAW || abs(GyZ) > LIM_TORCAO_GZ) {
+    somTorcao();
+    delay(400);
+  }
+
+  // Queda ou movimento brusco
+  if (GyY < LIM_QUEDA) {
+    somQueda();
+    delay(600);
+  }
+
+  delay(60);
+}
