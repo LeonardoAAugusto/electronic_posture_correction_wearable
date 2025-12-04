@@ -1,0 +1,99 @@
+#include <Wire.h>
+#include <MPU6050_tockn.h>
+
+MPU6050 mpu(Wire);
+
+const int buzzer = 9;
+
+// LIMITES
+float LIMITE_FRENTE = 35;
+float LIMITE_TRAS   = -35;
+float LIMITE_LADO   = 30;
+float LIMITE_QUEDA  = 70;
+float LIMITE_TORCAO = 120;
+
+void setup() {
+  Serial.begin(19200);
+  Wire.begin();
+
+  mpu.begin();
+  mpu.calcGyroOffsets(true);  // calibração automática
+
+  pinMode(buzzer, OUTPUT);
+  digitalWrite(buzzer, LOW);
+
+  Serial.println("=== SISTEMA INICIADO ===");
+}
+
+void beepAlerta() {
+  tone(buzzer, 500, 40);
+  delay(10);
+}
+
+void loop() {
+  mpu.update();
+
+  float pitch = mpu.getAngleX(); // inclinação frente/trás
+  float roll  = mpu.getAngleY(); // inclinação lateral
+  float yaw   = mpu.getAngleZ();
+  float gyroZ = mpu.getGyroZ();
+
+  Serial.print("Pitch: "); Serial.print(pitch);
+  Serial.print(" | Roll: "); Serial.print(roll);
+  Serial.print(" | Yaw: "); Serial.print(yaw);
+  Serial.print(" | GyZ: "); Serial.println(gyroZ);
+
+  bool detectou = false;
+
+  // ====== DETECÇÃO ======
+
+  // QUEDA
+  if (abs(pitch) > LIMITE_QUEDA || abs(roll) > LIMITE_QUEDA) {
+    Serial.println("DETECÇÃO: QUEDA");
+    beepAlerta();
+    detectou = true;
+  }
+
+  // >>> NOVAS DIREÇÕES <<<
+
+  // AGORA: PITCH POSITIVO = DIREITA
+  if (pitch > LIMITE_FRENTE) {
+    Serial.println("DETECÇÃO: DIREITA");
+    beepAlerta();
+    detectou = true;
+  }
+
+  // AGORA: PITCH NEGATIVO = ESQUERDA
+  if (pitch < LIMITE_TRAS) {
+    Serial.println("DETECÇÃO: ESQUERDA");
+    beepAlerta();
+    detectou = true;
+  }
+
+  // AGORA: ROLL POSITIVO = FRENTE
+  if (roll > LIMITE_LADO) {
+    Serial.println("DETECÇÃO: FRENTE");
+    beepAlerta();
+    detectou = true;
+  }
+
+  // AGORA: ROLL NEGATIVO = TRÁS
+  if (roll < -LIMITE_LADO) {
+    Serial.println("DETECÇÃO: TRÁS");
+    beepAlerta();
+    detectou = true;
+  }
+
+  // TORÇÃO
+  if (abs(gyroZ) > LIMITE_TORCAO) {
+    Serial.println("DETECÇÃO: TORÇÃO");
+    beepAlerta();
+    detectou = true;
+  }
+
+  if (!detectou) {
+    digitalWrite(buzzer, LOW);
+  }
+
+  delay(50);
+}
